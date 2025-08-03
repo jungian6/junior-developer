@@ -49,7 +49,7 @@ def get_favicon_url(source_url: str) -> str:
     return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
 
 
-def parse_content_with_sources(raw_data: dict) -> Data:
+def parse_content_with_sources(content_item: dict) -> Data:
     """Parse content with sources and categorise them as cited or non-cited.
     
     Processes raw data containing content and sources, identifying which sources
@@ -57,8 +57,8 @@ def parse_content_with_sources(raw_data: dict) -> Data:
     references with proper HTML links and categorises sources accordingly.
     
     Args:
-        raw_data: Dictionary containing 'content', 'sources', and 'category' keys.
-                 Sources should include 'id', 'title', 'source' fields.
+        content_item: Dictionary containing 'content', 'sources', and 'category' keys.
+                     Sources should include 'id', 'title', 'source' fields.
         
     Returns:
         A Data object with processed content, cited sources, and non-cited sources.
@@ -69,42 +69,42 @@ def parse_content_with_sources(raw_data: dict) -> Data:
         red error text indicating the citation was not found.
     """
     # Extract citation IDs from content 
-    citation_ids = set(extract_citation_ids(raw_data["content"]))
+    referenced_ids = set(extract_citation_ids(content_item["content"]))
     
     # Initialise lists for categorising sources
     cited_sources = []
     non_cited_sources = []
-    processed_content = raw_data["content"]
-    unmatched_citations = citation_ids.copy()  # Track which citations we haven't found sources for
+    content_with_links = content_item["content"]
+    unresolved_citations = referenced_ids.copy()  # Track which citations we haven't found sources for
 
-    for source_data in raw_data["sources"]:
-        source = Source(
-            **source_data, 
-            favicon=get_favicon_url(source_data["source"])
+    for source_dict in content_item["sources"]:
+        source_obj = Source(
+            **source_dict, 
+            favicon=get_favicon_url(source_dict["source"])
         )
 
-        if source.id in citation_ids:
-            cited_sources.append(source)
-            unmatched_citations.discard(source.id)
+        if source_obj.id in referenced_ids:
+            cited_sources.append(source_obj)
+            unresolved_citations.discard(source_obj.id)
             # Replace <ref> tags with HTML links
-            processed_content = processed_content.replace(
-                f"<ref>{source.id}</ref>", 
-                f'<a href="{source.source}" title="{source.title}">[source]</a>'            )
+            content_with_links = content_with_links.replace(
+                f"<ref>{source_obj.id}</ref>", 
+                f'<a href="{source_obj.source}" title="{source_obj.title}">[source] [{source_obj.id}]</a>'            )
         else:
-            non_cited_sources.append(source)
+            non_cited_sources.append(source_obj)
     
     # Handle any citations that don't have corresponding sources
-    for unmatched_id in unmatched_citations:
-        processed_content = processed_content.replace(
-            f"<ref>{unmatched_id}</ref>", 
-            f'<span style="color: red;">{unmatched_id} (citation not found)</span>'
+    for orphaned_citation_id in unresolved_citations:
+        content_with_links = content_with_links.replace(
+            f"<ref>{orphaned_citation_id}</ref>", 
+            f'<span style="color: red;">{orphaned_citation_id} (citation not found)</span>'
         )
         
     return Data(
-        category=raw_data["category"],
+        category=content_item["category"],
         cited_sources=cited_sources,
         non_cited_sources=non_cited_sources,
-        content=processed_content
+        content=content_with_links
     )
 
 @app.get("/data", response_model=list[Data])
@@ -136,6 +136,6 @@ def get_data() -> list[Data]:
         raise HTTPException(500, "Invalid JSON data")
     
     # Process each item to separate cited vs non-cited sources
-    processed_data = [parse_content_with_sources(item) for item in raw_data_list]
+    processed_data = [parse_content_with_sources(content_item) for content_item in raw_data_list]
     
     return processed_data
