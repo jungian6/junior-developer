@@ -32,10 +32,9 @@ export default function TableOfContents({ data }: TableOfContentsProps) {
       
       const scrollTop = mainElement.scrollTop;
       const viewportHeight = mainElement.clientHeight;
-      const viewportCenter = scrollTop + viewportHeight / 2;
 
-      let activeIdx = 0;
-      let maxVisibleArea = 0;
+      let mostVisibleSectionIndex = 0;
+      let largestVisibleArea = 0;
 
       // Check each section to see which one has the most visible area
       for (let i = 0; i < data.length; i++) {
@@ -53,18 +52,13 @@ export default function TableOfContents({ data }: TableOfContentsProps) {
         const visibleArea = Math.max(0, visibleBottom - visibleTop);
 
         // If this section has more visible area than previous sections, make it active
-        if (visibleArea > maxVisibleArea) {
-          maxVisibleArea = visibleArea;
-          activeIdx = i;
-        }
-
-        // Alternative fallback: if the section contains the center of the viewport
-        if (elementTop <= viewportCenter && elementBottom >= viewportCenter) {
-          activeIdx = i;
+        if (visibleArea > largestVisibleArea) {
+          largestVisibleArea = visibleArea;
+          mostVisibleSectionIndex = i;
         }
       }
 
-      setActiveIndex(activeIdx);
+      setActiveIndex(mostVisibleSectionIndex);
     };
 
     // Add scroll listener to the main element
