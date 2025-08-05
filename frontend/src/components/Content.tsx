@@ -9,17 +9,28 @@ import { motion } from "framer-motion";
 import type { Data } from "@/types/data";
 import { Badge } from "@/components/ui/badge"
 import { BadgeCheckIcon, Copy, Check, ExternalLink, Volume2, X, Pause, Play } from "lucide-react";
-import { toast } from "sonner";
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
+import { useSpeech } from "@/hooks/useSpeech";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 
 interface ContentProps {
   data: Data[];
 }
   
+// Styles for inline content badges/links
+const CONTENT_STYLES = [
+  "prose prose-sm max-w-none whitespace-pre-wrap",
+  // Style links as inline badges
+  "[&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:px-2 [&_a]:py-1",
+  "[&_a]:border [&_a]:border-border [&_a]:rounded [&_a]:text-sm [&_a]:no-underline",
+  "[&_a]:bg-muted/50 [&_a]:hover:bg-muted [&_a]:transition-colors",
+  // Style red spans as red badges  
+  "[&_span[style*='color:_red']]:inline-block [&_span[style*='color:_red']]:px-2 [&_span[style*='color:_red']]:py-1",
+  "[&_span[style*='color:_red']]:border [&_span[style*='color:_red']]:border-red-300 [&_span[style*='color:_red']]:rounded",
+  "[&_span[style*='color:_red']]:text-sm [&_span[style*='color:_red']]:bg-red-50 [&_span[style*='color:_red']]:text-red-700"
+].join(" ");
+
 export default function Content({ data }: ContentProps) {
-  // State to track the URL that was copied
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
-  
   // State to manage the confirmation dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedSource, setSelectedSource] = useState<{
@@ -28,135 +39,9 @@ export default function Content({ data }: ContentProps) {
     favicon: string;
   } | null>(null);
   
-  // State for text-to-speech
-  const [speechStatus, setSpeechStatus] = useState<'idle' | 'speaking' | 'paused'>('idle');
-  const [currentSpeakingIndex, setCurrentSpeakingIndex] = useState<number | null>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
-  // Function to copy the URL to the clipboard
-  const copyToClipboard = async (url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiedUrl(url);
-      setTimeout(() => setCopiedUrl(null), 1000);
-      toast("URL copied to clipboard", {
-        description: url,
-      });
-    } catch (err) {
-      console.error('Failed to copy: ', err);
-      toast("Failed to copy URL", {
-        description: "Please try again",
-      });
-    }
-  };
-
-  // Function to extract text content from HTML
-  const extractTextFromHtml = (html: string): string => {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = html;
-    return tempDiv.textContent || tempDiv.innerText || '';
-  };
-
-  // Function to handle text-to-speech
-  const handleTextToSpeech = (content: string, index: number) => {
-    // Check if Web Speech API is supported
-    if (!('speechSynthesis' in window)) {
-      toast("Text-to-speech not supported", {
-        description: "Your browser doesn't support this feature",
-      });
-      return;
-    }
-
-    // If currently speaking the same content, toggle pause/resume
-    if (currentSpeakingIndex === index && speechStatus === 'speaking') {
-      window.speechSynthesis.pause();
-      setSpeechStatus('paused');
-      return;
-    }
-
-    // If paused and clicking the same content, resume
-    if (currentSpeakingIndex === index && speechStatus === 'paused') {
-      window.speechSynthesis.resume();
-      setSpeechStatus('speaking');
-      return;
-    }
-
-    // Stop any current speech
-    if (utteranceRef.current) {
-      utteranceRef.current.onerror = null;
-    }
-    window.speechSynthesis.cancel();
-
-    // Extract text from HTML content
-    const textToSpeak = extractTextFromHtml(content);
-    
-    if (!textToSpeak.trim()) {
-      toast("No text to read", {
-        description: "This content appears to be empty",
-      });
-      return;
-    }
-
-    // Create new utterance
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utteranceRef.current = utterance;
-
-    // Configure speech settings
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 1;
-
-    // Set up event handlers
-    utterance.onstart = () => {
-      setSpeechStatus('speaking');
-      setCurrentSpeakingIndex(index);
-    };
-
-    // When the speech ends, set the status to idle and clear the current speaking index
-    utterance.onend = () => {
-      setSpeechStatus('idle');
-      setCurrentSpeakingIndex(null);
-    };
-
-    // When an error occurs, set the status to idle and clear the current speaking index
-    utterance.onerror = (event) => {
-      console.error('Speech synthesis error:', event);
-      setSpeechStatus('idle');
-      setCurrentSpeakingIndex(null);
-      
-      // Only show user-facing errors for actual problems, not cancellations
-      if (event.error !== 'canceled' && event.error !== 'interrupted') {
-        toast("Speech error", {
-          description: "Failed to read the content aloud",
-        });
-      }
-    };
-
-    // Start speaking
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // Function to stop text-to-speech
-  const stopTextToSpeech = () => {
-    // Remove error handler before cancelling to avoid false error reports
-    if (utteranceRef.current) {
-      utteranceRef.current.onerror = null;
-    }
-    window.speechSynthesis.cancel();
-    setSpeechStatus('idle');
-    setCurrentSpeakingIndex(null);
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      // Remove error handler before cancelling to avoid false error reports
-      if (utteranceRef.current) {
-        utteranceRef.current.onerror = null;
-      }
-      window.speechSynthesis.cancel();
-    };
-  }, []);
+  // Custom hooks for text-to-speech and clipboard
+  const { speechStatus, currentSpeakingIndex, handleTextToSpeech, stopTextToSpeech } = useSpeech();
+  const { copyToClipboard, isCopied } = useCopyToClipboard();
 
   // Handle source click
   const handleSourceClick = (source: { title: string; source: string; favicon: string }) => {
@@ -269,7 +154,7 @@ export default function Content({ data }: ContentProps) {
           <CardContent className="space-y-6">
             {/* Main Content */}
             <div 
-              className="prose prose-sm max-w-none whitespace-pre-wrap [&_a]:inline-flex [&_a]:items-center [&_a]:gap-1 [&_a]:px-2 [&_a]:py-1 [&_a]:border [&_a]:border-border [&_a]:rounded [&_a]:text-sm [&_a]:no-underline [&_a]:bg-muted/50 [&_a]:hover:bg-muted [&_a]:transition-colors [&_span[style*='color:_red']]:inline-block [&_span[style*='color:_red']]:px-2 [&_span[style*='color:_red']]:py-1 [&_span[style*='color:_red']]:border [&_span[style*='color:_red']]:border-red-300 [&_span[style*='color:_red']]:rounded [&_span[style*='color:_red']]:text-sm [&_span[style*='color:_red']]:bg-red-50 [&_span[style*='color:_red']]:text-red-700"
+              className={CONTENT_STYLES}
               dangerouslySetInnerHTML={{ __html: item.content }}
             />
             
@@ -309,9 +194,9 @@ export default function Content({ data }: ContentProps) {
                               variant="ghost"
                               size="sm"
                               className="p-2"
-                              onClick={() => copyToClipboard(source.source)}
+                              onClick={() => copyToClipboard(source.source, "URL copied to clipboard")}
                             >
-                              {copiedUrl === source.source ? (
+                              {isCopied(source.source) ? (
                                 <Check className="h-4 w-4" />
                               ) : (
                                 <Copy className="h-4 w-4" />
@@ -362,9 +247,9 @@ export default function Content({ data }: ContentProps) {
                               variant="ghost"
                               size="sm"
                               className="p-2"
-                              onClick={() => copyToClipboard(source.source)}
+                              onClick={() => copyToClipboard(source.source, "URL copied to clipboard")}
                             >
-                              {copiedUrl === source.source ? (
+                              {isCopied(source.source) ? (
                                 <Check className="h-4 w-4" />
                               ) : (
                                 <Copy className="h-4 w-4" />
