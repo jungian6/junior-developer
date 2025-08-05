@@ -7,7 +7,7 @@
 ---
 
 
-## Implementation Notes
+## Brief Implementation Notes
 
 I implemented SSR by fetching data directly in the async page component. Server Components need absolute URLs, so I'm fetching straight from the FastAPI backend at `http://localhost:8000/data` - this is the recommended Next.js pattern for external APIs as it avoids unnecessary round trips. I didn't implement any access control or authentication for the external API since this wasn't asked for in the requirements. I used the default ports: `127.0.0.1:8000` for FastAPI and `localhost:3000` for Next.js.
 
