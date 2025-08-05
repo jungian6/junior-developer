@@ -8,9 +8,9 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import type { Data } from "@/types/data";
 import { Badge } from "@/components/ui/badge"
-import { BadgeCheckIcon, Copy, Check, ExternalLink } from "lucide-react";
+import { BadgeCheckIcon, Copy, Check, ExternalLink, Volume2, X, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 interface ContentProps {
   data: Data[];
@@ -27,6 +27,11 @@ export default function Content({ data }: ContentProps) {
     source: string;
     favicon: string;
   } | null>(null);
+  
+  // State for text-to-speech
+  const [speechStatus, setSpeechStatus] = useState<'idle' | 'speaking' | 'paused'>('idle');
+  const [currentSpeakingIndex, setCurrentSpeakingIndex] = useState<number | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Function to copy the URL to the clipboard
   const copyToClipboard = async (url: string) => {
@@ -45,13 +50,121 @@ export default function Content({ data }: ContentProps) {
     }
   };
 
-  // Function to handle source click
+  // Function to extract text content from HTML
+  const extractTextFromHtml = (html: string): string => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    return tempDiv.textContent || tempDiv.innerText || '';
+  };
+
+  // Function to handle text-to-speech
+  const handleTextToSpeech = (content: string, index: number) => {
+    // Check if Web Speech API is supported
+    if (!('speechSynthesis' in window)) {
+      toast("Text-to-speech not supported", {
+        description: "Your browser doesn't support this feature",
+      });
+      return;
+    }
+
+    // If currently speaking the same content, toggle pause/resume
+    if (currentSpeakingIndex === index && speechStatus === 'speaking') {
+      window.speechSynthesis.pause();
+      setSpeechStatus('paused');
+      return;
+    }
+
+    // If paused and clicking the same content, resume
+    if (currentSpeakingIndex === index && speechStatus === 'paused') {
+      window.speechSynthesis.resume();
+      setSpeechStatus('speaking');
+      return;
+    }
+
+    // Stop any current speech
+    if (utteranceRef.current) {
+      utteranceRef.current.onerror = null;
+    }
+    window.speechSynthesis.cancel();
+
+    // Extract text from HTML content
+    const textToSpeak = extractTextFromHtml(content);
+    
+    if (!textToSpeak.trim()) {
+      toast("No text to read", {
+        description: "This content appears to be empty",
+      });
+      return;
+    }
+
+    // Create new utterance
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utteranceRef.current = utterance;
+
+    // Configure speech settings
+    utterance.rate = 0.9;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    // Set up event handlers
+    utterance.onstart = () => {
+      setSpeechStatus('speaking');
+      setCurrentSpeakingIndex(index);
+    };
+
+    // When the speech ends, set the status to idle and clear the current speaking index
+    utterance.onend = () => {
+      setSpeechStatus('idle');
+      setCurrentSpeakingIndex(null);
+    };
+
+    // When an error occurs, set the status to idle and clear the current speaking index
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      setSpeechStatus('idle');
+      setCurrentSpeakingIndex(null);
+      
+      // Only show user-facing errors for actual problems, not cancellations
+      if (event.error !== 'canceled' && event.error !== 'interrupted') {
+        toast("Speech error", {
+          description: "Failed to read the content aloud",
+        });
+      }
+    };
+
+    // Start speaking
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Function to stop text-to-speech
+  const stopTextToSpeech = () => {
+    // Remove error handler before cancelling to avoid false error reports
+    if (utteranceRef.current) {
+      utteranceRef.current.onerror = null;
+    }
+    window.speechSynthesis.cancel();
+    setSpeechStatus('idle');
+    setCurrentSpeakingIndex(null);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Remove error handler before cancelling to avoid false error reports
+      if (utteranceRef.current) {
+        utteranceRef.current.onerror = null;
+      }
+      window.speechSynthesis.cancel();
+    };
+  }, []);
+
+  // Handle source click
   const handleSourceClick = (source: { title: string; source: string; favicon: string }) => {
     setSelectedSource(source);
     setDialogOpen(true);
   };
 
-  // Function to navigate to the source
+  // Navigate to the source website
   const navigateToSource = () => {
     if (selectedSource) {
       window.open(selectedSource.source, '_blank', 'noopener,noreferrer');
@@ -84,13 +197,73 @@ export default function Content({ data }: ContentProps) {
         >
           <Card id={`content-${index}`} className="w-full max-w-4xl scroll-mt-20">
           <CardHeader>
-            <CardTitle className="capitalize text-xl">
-              {item.category.replace(/_/g, ' ')}
-            </CardTitle>
-            <CardDescription>
-              {item.cited_sources.length} cited source{item.cited_sources.length !== 1 ? 's' : ''} 
-              {item.non_cited_sources.length > 0 && ` and ${item.non_cited_sources.length} additional source${item.non_cited_sources.length !== 1 ? 's' : ''}`}
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="capitalize text-xl">
+                  {item.category.replace(/_/g, ' ')}
+                </CardTitle>
+                <CardDescription>
+                  {item.cited_sources.length} cited source{item.cited_sources.length !== 1 ? 's' : ''} 
+                  {item.non_cited_sources.length > 0 && ` and ${item.non_cited_sources.length} additional source${item.non_cited_sources.length !== 1 ? 's' : ''}`}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleTextToSpeech(item.content, index)}
+                        disabled={currentSpeakingIndex !== null && currentSpeakingIndex !== index}
+                        className="gap-2"
+                      >
+                        {currentSpeakingIndex === index && speechStatus === 'speaking' ? (
+                          <Pause className="h-4 w-4" />
+                        ) : currentSpeakingIndex === index && speechStatus === 'paused' ? (
+                          <Play className="h-4 w-4" />
+                        ) : (
+                          <Volume2 className="h-4 w-4" />
+                        )}
+                        {currentSpeakingIndex === index && speechStatus !== 'idle' ? (
+                          speechStatus === 'speaking' ? 'Pause' : 'Resume'
+                        ) : (
+                          'Read Aloud'
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {currentSpeakingIndex === index && speechStatus === 'speaking' 
+                          ? 'Pause reading' 
+                          : currentSpeakingIndex === index && speechStatus === 'paused'
+                          ? 'Resume reading'
+                          : 'Read content aloud'
+                        }
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                {currentSpeakingIndex === index && speechStatus !== 'idle' && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={stopTextToSpeech}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Stop reading</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
+            </div>
           </CardHeader>
           
           <CardContent className="space-y-6">

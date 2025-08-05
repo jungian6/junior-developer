@@ -13,6 +13,10 @@ I implemented SSR by fetching data directly in the async page component. Server 
 
 The frontend uses shadcn/ui for component styling, Framer Motion for animations, Lucide React for icons, and Sonner for toast notifications.
 
+### Accessibility Features
+
+I've added the Web Speech API to provide text-to-speech functionality for content cards. Users can click the "Read Aloud" button in each card header to have the content read aloud, with pause/resume and stop controls. This accessibility feature works entirely in the browser without any external dependencies.
+
 ### Favicon Implementation
 
 For retrieving favicons, I used Google's favicon service rather than fetching them directly from each site's `/favicon.ico` as some sites didnt have a favicon:
@@ -27,7 +31,7 @@ def get_favicon_url(source_url: str) -> str:
 
 ### Error Handling for Unmatched Citations
 
-During testing, I noticed that one citation reference `<ref>dOQ-BJgBLViOYD1OzWM</ref>` in the debt category doesn't match its corresponding source ID `dOQ-BJgBBLViOYD1OzWM` (missing a 'B' character). Rather than modifying the test data (which could have been intentionally included to test error handling), I added logic in the main `parse_content_with_sources()` method that replaces any unmatched citation references with a 'Source not found' message the frontend then handles the ui. This approach preserves content integrity by maintaining the original citation placeholders rather than silently removing them, providing transparency to users about missing source references and enabling better debugging of data quality issues.
+During testing, I noticed that one citation reference `<ref>dOQ-BJgBLViOYD1OzWM</ref>` in the debt category doesn't match its corresponding source ID `dOQ-BJgBBLViOYD1OzWM` (missing a 'B' character). Rather than modifying the test data (which could have been intentionally included to test error handling), I added logic in the main `parse_content_with_sources()` method that replaces any unmatched citation references with a 'Source not found' message the frontend then handles the ui. I figured it's better to show users when a source is missing rather than just hiding the problem - this way it's clear something's wrong and makes it easier to spot and fix data issues.
 
 ## Overview
 
