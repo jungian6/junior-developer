@@ -6,6 +6,29 @@
 
 ---
 
+
+## Implementation Notes
+
+I implemented SSR by fetching data directly in the async page component. Server Components need absolute URLs, so I'm fetching straight from the FastAPI backend at `http://localhost:8000/data` - this is the recommended Next.js pattern for external APIs as it avoids unnecessary round trips. I didn't implement any access control or authentication for the external API since this wasn't asked for in the requirements. I used the default ports: `127.0.0.1:8000` for FastAPI and `localhost:3000` for Next.js.
+
+The frontend uses shadcn/ui for component styling, Framer Motion for animations, Lucide React for icons, and Sonner for toast notifications.
+
+### Favicon Implementation
+
+For retrieving favicons, I used Google's favicon service rather than fetching them directly from each site's `/favicon.ico` as some sites didnt have a favicon:
+
+```python
+def get_favicon_url(source_url: str) -> str:
+    parsed_url = urlparse(source_url)
+    domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
+```
+---
+
+### Error Handling for Unmatched Citations
+
+During testing, I noticed that one citation reference `<ref>dOQ-BJgBLViOYD1OzWM</ref>` in the debt category doesn't match its corresponding source ID `dOQ-BJgBBLViOYD1OzWM` (missing a 'B' character). Rather than modifying the test data (which could have been intentionally included to test error handling), I added logic in the main `parse_content_with_sources()` method that replaces any unmatched citation references with a 'Source not found' message the frontend then handles the ui. This approach preserves content integrity by maintaining the original citation placeholders rather than silently removing them, providing transparency to users about missing source references and enabling better debugging of data quality issues.
+
 ## Overview
 
 This is a full stack practical for Junior Developer at Citizens Advice SORT. The project consists of a full-stack application with a Python backend and Next.js frontend.

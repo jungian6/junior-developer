@@ -89,7 +89,8 @@ def parse_content_with_sources(content_item: dict) -> Data:
             # Replace <ref> tags with HTML links
             content_with_links = content_with_links.replace(
                 f"<ref>{source_obj.id}</ref>", 
-                f'<a href="{source_obj.source}" title="{source_obj.title}">[source] [{source_obj.id}]</a>'            )
+                f'<a href="{source_obj.source}" title="{source_obj.title}" target="_blank" rel="noopener noreferrer"><img src="{source_obj.favicon}" alt="" width="16" height="16">{source_obj.title}</a>'
+            )
         else:
             non_cited_sources.append(source_obj)
     
@@ -97,7 +98,7 @@ def parse_content_with_sources(content_item: dict) -> Data:
     for orphaned_citation_id in unresolved_citations:
         content_with_links = content_with_links.replace(
             f"<ref>{orphaned_citation_id}</ref>", 
-            f'<span style="color: red;">{orphaned_citation_id} (citation not found)</span>'
+            f'<span style="color: red;">Source not found</span>'
         )
         
     return Data(
